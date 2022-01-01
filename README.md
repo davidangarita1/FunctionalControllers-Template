@@ -244,3 +244,99 @@ public class UseCaseListar implements Supplier<Flux<DatoDTO>> {
 El caso de uso es muy sencillo, utiliza el repositorio para guardar el objeto que previamente se mapeo de DTO a objeto de colección. Al final usamos un mapa para obtener el ID del dato guardado.
 
 Con estos elementos hemos cubierto la creación de una aplicación Spring Boot completamente funcional y reactiva para construir apis de RESTful services. Puedes probar con Postman el funcionamiento de estos servicios. 
+
+
+# Test en Controladores Funcionales
+
+Pruebas a API reactiva y funcional
+
+Tomando de base el api de servicios que creamos anteriormente vamos a crear algunos test para probar nuestros servicios y controladores funcionales y reactivos.
+
+
+
+## Pruebas Unitarias a Routers Reactivos.
+
+Veamos ahora el caso de nuestros Routers, debido a que este es accesible mediante protocolo HTTP no podemos instanciarlo como hicimos con el casos de uso, debemos usar WebTestClient el cual nos permite simular una interfaz web para hacer los llamados GET, POST, PUT o DELETE de manera reactiva y no que harían quien consumiera dichos servicios.
+
+
+### Prueba Funcional GET
+```java
+@WebFluxTest
+@ExtendWith(SpringExtension.class)
+@ContextConfiguration(classes = {ConsultarDatoRouter.class, UseCaseListar.class, MapperUtils.class})
+class ConsultarDatoRouterTest {
+
+  @MockBean
+    private Repositorio repositorio;
+
+    @Autowired
+    private WebTestClient webTestClient;
+
+
+    @Test
+    public void testGetDatos() {
+     Dato dato1 = new Dato();
+        dato1.setInformacion("Informacion 1");
+        Dato dato2 = new Dato();
+        dato2.setInformacion("Informacion 2");
+
+        when(repositorio.findAll()).thenReturn(Flux.just(dato1, dato2));
+
+        webTestClient.get()
+                .uri("/consultar")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBodyList(DatoDTO.class)
+                .value(userResponse -> {
+                            Assertions.assertThat(userResponse.get(0).getInformacion()).isEqualTo(dato1.getInformacion());
+                            Assertions.assertThat(userResponse.get(1).getInformacion()).isEqualTo(dato2.getInformacion());
+                        }
+                );
+    }
+
+}
+```
+
+
+### Prueba Funcional POST
+```java
+@WebFluxTest
+@ExtendWith(SpringExtension.class)
+@ContextConfiguration(classes = {CrearDatoRouter.class, UseCaseCrear.class, MapperUtils.class})
+class CrearDatoRouterTest {
+
+    @MockBean
+    private Repositorio repositorio;
+
+    @Autowired
+    private WebTestClient webTestClient;
+
+    @Test
+    public void testCreateUser() {
+
+        Dato dato = new Dato();
+        dato.setId("xxxxxxx");
+        dato.setInformacion("Informacion 1");
+        DatoDTO datoDTO = new DatoDTO(dato.getId(), dato.getInformacion());
+        Mono<Dato> datoMono = Mono.just(dato);
+        when(repositorio.save(any())).thenReturn(datoMono);
+
+        webTestClient.post()
+                .uri("/crear")
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.APPLICATION_JSON)
+                .body(Mono.just(datoDTO), DatoDTO.class)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class)
+                .value(userResponse -> {
+                            Assertions.assertThat(userResponse).isEqualTo(dato.getId());
+                        }
+                );
+    }
+
+}
+```
+
+Las pruebas descritas no solo nos servirán para advertir si las funcionalidades esperadas cambian con el tiempo, sino que serán guia para que el desarrollo se mantenga estable, cuando creamos APIs de servicios debemos garantizar que la comunicación sea la misma siempre de manera que quien consuma dicha API no tenga que realizar cambios inesperados a raíz de modificaciones en el back-end.
+
